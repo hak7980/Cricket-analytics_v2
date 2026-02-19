@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cricket Analytics</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════ HEADER ═══════════════════════ -->
+<header class="header">
+  <div class="header-inner">
+    <h1 class="logo">Cricket Analytics</h1>
+    <nav class="nav">
+      <button class="nav-btn active" data-view="library">Match Library</button>
+      <button class="nav-btn" data-view="analytics">Analytics</button>
+    </nav>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════ ADD PANEL ════════════════════ -->
+<div class="add-panel">
+  <div class="add-inner">
+    <span class="add-label">Add data from ESPNcricinfo</span>
+    <div class="add-inputs">
+      <input id="urlInput" type="text" class="url-input"
+             placeholder="Paste a match or series URL  e.g. espncricinfo.com/series/.../match/..." />
+      <button class="btn btn-primary" id="addMatchBtn">Add Match</button>
+      <button class="btn btn-secondary" id="addSeriesBtn">Add Full Series</button>
+    </div>
+    <div id="jobStatus" class="job-status hidden"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ MAIN ═════════════════════════ -->
+<main class="main">
+
+  <!-- ─── LIBRARY VIEW ─────────────────────────────────────────────── -->
+  <section id="view-library" class="view active">
+    <div id="matchGrid" class="match-grid">
+      <div class="empty-state">No matches yet. Paste a CricInfo URL above to get started.</div>
+    </div>
+  </section>
+
+  <!-- ─── MATCH DETAIL VIEW ───────────────────────────────────────── -->
+  <section id="view-match" class="view">
+    <div class="match-header" id="matchHeader"></div>
+
+    <!-- innings tabs -->
+    <div class="innings-tabs" id="inningsTabs"></div>
+
+    <!-- filter bar -->
+    <div class="filter-bar" id="filterBar">
+      <select class="filter-select" id="filterBowler"><option value="">All Bowlers</option></select>
+      <select class="filter-select" id="filterBatsman"><option value="">All Batsmen</option></select>
+      <select class="filter-select" id="filterLength">
+        <option value="">All Lengths</option>
+        <option value="bouncer">Bouncer</option>
+        <option value="short">Short</option>
+        <option value="short_of_good">Short of good length</option>
+        <option value="good_length">Good length</option>
+        <option value="full">Full</option>
+        <option value="yorker">Yorker</option>
+        <option value="full_toss">Full toss</option>
+      </select>
+      <select class="filter-select" id="filterLine">
+        <option value="">All Lines</option>
+        <option value="outside_off">Outside off</option>
+        <option value="off_stump">Off stump</option>
+        <option value="middle_stump">Middle stump</option>
+        <option value="leg_stump">Leg stump</option>
+        <option value="outside_leg">Outside leg</option>
+      </select>
+      <select class="filter-select" id="filterPhase">
+        <option value="">All Phases</option>
+        <option value="powerplay">Powerplay (1-6)</option>
+        <option value="middle">Middle (7-15)</option>
+        <option value="death">Death (16+)</option>
+      </select>
+      <button class="btn btn-sm btn-secondary" id="clearFilters">Clear</button>
+    </div>
+
+    <!-- visualisations -->
+    <div class="viz-row">
+      <div class="card pitch-card">
+        <div class="card-title">Pitch Map</div>
+        <div class="pitch-wrap">
+          <svg id="pitchMap" class="pitch-svg" viewBox="0 0 200 360" preserveAspectRatio="xMidYMid meet">
+            <!-- Pitch background -->
+            <rect x="40" y="10" width="120" height="340" rx="4" fill="#3a7d1e" />
+            <rect x="60" y="10" width="80" height="340" fill="#4a9a28" />
+            <!-- Crease lines -->
+            <line x1="40" y1="60"  x2="160" y2="60"  stroke="#fff" stroke-width="1.5" opacity="0.7"/>
+            <line x1="40" y1="300" x2="160" y2="300" stroke="#fff" stroke-width="1.5" opacity="0.7"/>
+            <!-- Stumps at batting end -->
+            <line x1="97"  y1="298" x2="97"  y2="312" stroke="#c8a96e" stroke-width="2"/>
+            <line x1="100" y1="298" x2="100" y2="312" stroke="#c8a96e" stroke-width="2"/>
+            <line x1="103" y1="298" x2="103" y2="312" stroke="#c8a96e" stroke-width="2"/>
+            <!-- Stumps at bowling end -->
+            <line x1="97"  y1="48" x2="97"  y2="62" stroke="#c8a96e" stroke-width="2"/>
+            <line x1="100" y1="48" x2="100" y2="62" stroke="#c8a96e" stroke-width="2"/>
+            <line x1="103" y1="48" x2="103" y2="62" stroke="#c8a96e" stroke-width="2"/>
+            <!-- Zone guides -->
+            <text x="100" y="115" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="8">BOUNCER</text>
+            <text x="100" y="155" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="8">SHORT</text>
+            <text x="100" y="195" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="8">GOOD LENGTH</text>
+            <text x="100" y="235" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="8">FULL</text>
+            <text x="100" y="275" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="8">YORKER</text>
+            <!-- Dots layer (populated by JS) -->
+            <g id="pitchDots"></g>
+          </svg>
+          <div class="pitch-legend">
+            <span class="leg-dot" style="background:#6b7280"></span> Dot
+            <span class="leg-dot" style="background:#f59e0b"></span> 1-3
+            <span class="leg-dot" style="background:#3b82f6"></span> 4
+            <span class="leg-dot" style="background:#8b5cf6"></span> 6
+            <span class="leg-dot" style="background:#ef4444"></span> Wicket
+          </div>
+        </div>
+      </div>
+
+      <div class="card chart-card">
+        <div class="card-title">Runs per Over</div>
+        <canvas id="manhattanChart"></canvas>
+      </div>
+
+      <div class="card stats-card">
+        <div class="card-title">Innings Stats</div>
+        <div id="statsGrid" class="stats-grid"></div>
+      </div>
+    </div>
+
+    <!-- ball-by-ball table -->
+    <div class="card table-card">
+      <div class="card-title" id="tableTitle">Ball by Ball</div>
+      <div class="table-wrap">
+        <table class="delivery-table" id="deliveryTable">
+          <thead>
+            <tr>
+              <th>Over</th>
+              <th>Bowler</th>
+              <th>Batsman</th>
+              <th>Runs</th>
+              <th>Extras</th>
+              <th>Wicket</th>
+              <th>Length</th>
+              <th>Line</th>
+              <th>Movement</th>
+              <th>Shot</th>
+              <th>Control</th>
+              <th>Slower</th>
+              <th>Commentary</th>
+            </tr>
+          </thead>
+          <tbody id="deliveryBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── ANALYTICS VIEW ──────────────────────────────────────────── -->
+  <section id="view-analytics" class="view">
+    <div class="analytics-layout">
+      <div class="analytics-sidebar card">
+        <div class="card-title">Query Builder</div>
+
+        <label class="form-label">Analysis type</label>
+        <select class="filter-select w100" id="analyticsType">
+          <option value="batsman_vulnerability">Batsman Vulnerability</option>
+          <option value="bowler_profile">Bowler Profile</option>
+          <option value="head_to_head">Head to Head</option>
+          <option value="phase_analysis">Phase Analysis</option>
+        </select>
+
+        <div id="analyticsParams" class="analytics-params"></div>
+
+        <button class="btn btn-primary w100 mt" id="runAnalyticsBtn">Run Analysis</button>
+        <div id="analyticsStatus" class="job-status hidden mt"></div>
+      </div>
+
+      <div class="analytics-main">
+        <div id="analyticsResult" class="analytics-result">
+          <div class="empty-state">Choose an analysis type and run a query.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
