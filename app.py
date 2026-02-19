@@ -44,7 +44,8 @@ def _run_scrape(job_id: str, series_id: str, match_id: str):
 
         match_info = scraper.get_match_info(series_id, match_id)
         if not match_info:
-            db.update_job(job_id, "failed", "Could not fetch match info.", 0)
+            reason = scraper.last_error or "No data returned by ESPN API"
+            db.update_job(job_id, "failed", f"Could not fetch match info: {reason}", 0)
             return
 
         db.upsert_match({

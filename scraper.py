@@ -79,6 +79,7 @@ def extract_series_id(url: str) -> Optional[str]:
 class CricinfoScraper:
     def __init__(self, delay: float = 1.2):
         self.delay = delay
+        self.last_error: str = ""
         self.session = requests.Session()
         self.session.headers.update(HEADERS)
         self.session.verify = False
@@ -91,17 +92,30 @@ class CricinfoScraper:
         for attempt in range(retries):
             try:
                 resp = self.session.get(url, params=params, timeout=30)
+                log.info("GET %s → HTTP %s", resp.url, resp.status_code)
                 resp.raise_for_status()
                 time.sleep(self.delay)
                 return resp.json()
             except requests.exceptions.HTTPError as e:
-                log.warning("HTTP %s for %s (attempt %d)", e.response.status_code, url, attempt + 1)
+                self.last_error = f"HTTP {e.response.status_code} from ESPN API"
+                log.warning("HTTP %s for %s (attempt %d) — body: %s",
+                            e.response.status_code, url, attempt + 1,
+                            e.response.text[:300])
                 if e.response.status_code in (429, 503):
                     time.sleep(2 ** attempt * 5)
                 else:
                     break
+            except requests.exceptions.SSLError as e:
+                self.last_error = f"SSL error: {e}"
+                log.warning("SSL error (attempt %d): %s", attempt + 1, e)
+                time.sleep(2 ** attempt)
+            except requests.exceptions.ConnectionError as e:
+                self.last_error = f"Connection error: {e}"
+                log.warning("Connection error (attempt %d): %s", attempt + 1, e)
+                time.sleep(2 ** attempt)
             except Exception as e:
-                log.warning("Request error: %s (attempt %d)", e, attempt + 1)
+                self.last_error = str(e)
+                log.warning("Request error (attempt %d): %s", attempt + 1, e)
                 time.sleep(2 ** attempt)
         return None
 
@@ -110,14 +124,27 @@ class CricinfoScraper:
     # ------------------------------------------------------------------
 
     def get_match_info(self, series_id: str, match_id: str) -> Optional[Dict]:
+        # Primary attempt with both IDs
         data = self._get(f"{BASE}/match/home", {
             "lang": "en",
             "seriesId": series_id,
             "matchId": match_id,
         })
+        # Fallback: try without seriesId (some matches work with matchId alone)
+        if not data and series_id and series_id != "0":
+            log.info("Retrying get_match_info without seriesId")
+            data = self._get(f"{BASE}/match/home", {
+                "lang": "en",
+                "matchId": match_id,
+            })
         if not data:
             return None
-        return self._parse_match_info(data, series_id, match_id)
+        try:
+            return self._parse_match_info(data, series_id, match_id)
+        except Exception as e:
+            log.exception("_parse_match_info failed: %s", e)
+            self.last_error = f"Parsing failed: {e}"
+            return None
 
     @staticmethod
     def _parse_match_info(data: Dict, series_id: str, match_id: str) -> Dict:
