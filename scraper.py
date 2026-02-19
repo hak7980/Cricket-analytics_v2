@@ -12,6 +12,9 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
+import urllib3
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 log = logging.getLogger(__name__)
 
@@ -78,6 +81,7 @@ class CricinfoScraper:
         self.delay = delay
         self.session = requests.Session()
         self.session.headers.update(HEADERS)
+        self.session.verify = False
 
     # ------------------------------------------------------------------
     # Low-level HTTP
