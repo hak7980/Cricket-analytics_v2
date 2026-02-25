@@ -13,6 +13,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 import urllib3
+try:
+    import cloudscraper
+    _HAS_CLOUDSCRAPER = True
+except ImportError:
+    _HAS_CLOUDSCRAPER = False
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -80,9 +85,28 @@ class CricinfoScraper:
     def __init__(self, delay: float = 1.2):
         self.delay = delay
         self.last_error: str = ""
-        self.session = requests.Session()
+        if _HAS_CLOUDSCRAPER:
+            self.session = cloudscraper.create_scraper(
+                browser={"browser": "chrome", "platform": "windows", "mobile": False}
+            )
+            log.info("Using cloudscraper to bypass Cloudflare")
+        else:
+            self.session = requests.Session()
+            log.warning("cloudscraper not available, falling back to plain requests")
         self.session.headers.update(HEADERS)
         self.session.verify = False
+        self._warm_up()
+
+    # ------------------------------------------------------------------
+    # Session warm-up (establishes cookies Cloudflare expects)
+    # ------------------------------------------------------------------
+
+    def _warm_up(self):
+        try:
+            self.session.get("https://www.espncricinfo.com/", timeout=15, verify=False)
+            log.info("Session warm-up complete")
+        except Exception as e:
+            log.warning("Warm-up failed (non-fatal): %s", e)
 
     # ------------------------------------------------------------------
     # Low-level HTTP
@@ -91,9 +115,14 @@ class CricinfoScraper:
     def _get(self, url: str, params: Dict = None, retries: int = 3) -> Optional[Dict]:
         for attempt in range(retries):
             try:
-                resp = self.session.get(url, params=params, timeout=30)
+                resp = self.session.get(url, params=params, timeout=30, verify=False)
                 log.info("GET %s → HTTP %s", resp.url, resp.status_code)
                 resp.raise_for_status()
+                ct = resp.headers.get("Content-Type", "")
+                if "json" not in ct and resp.text.strip().startswith("<"):
+                    self.last_error = "ESPN returned HTML instead of JSON (blocked by Cloudflare?)"
+                    log.warning("Non-JSON response (Content-Type: %s): %s", ct, resp.text[:200])
+                    break
                 time.sleep(self.delay)
                 return resp.json()
             except requests.exceptions.HTTPError as e:
